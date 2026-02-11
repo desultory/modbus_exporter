@@ -119,7 +119,7 @@ class ModbusExporter(Exporter):
                 self.logger.info(f"[{self.device_id}] {name}: {value.registers}")
                 metric = Metric(
                     name=metric_list,
-                    labels={"device_id": str(self.device_id), "address": str(address)},
+                    labels={"device_id": str(self.device_id), "address": str(address), "value_name": name},
                     value=decoded_value,
                     type="gauge",
                     help=name,
