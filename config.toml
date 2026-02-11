@@ -1,8 +1,15 @@
 listen_ip = '0.0.0.0'
 
 [modbus]
-serial_port = "/dev/ttyUSB0"
+mode = "rtu"
 slave_address = 210
+timeout = 2
+
+[modbus.rtu]
+port = "/dev/ttyUSB0"
+
+[modbus.tcp]
+port = 502
 
 [modbus.registers.battery_state_of_charge]
 battery_state_of_charge = 167

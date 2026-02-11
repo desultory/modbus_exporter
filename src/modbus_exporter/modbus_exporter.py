@@ -1,5 +1,8 @@
 from prometheus_exporter import Exporter, Metric
+from zenlib.util.colorize import colorize as c_
+from zenlib.util import pretty_print
 from pymodbus.client.serial import AsyncModbusSerialClient
+from pymodbus.client.tcp import AsyncModbusTcpClient
 from pymodbus.exceptions import ConnectionException
 
 
@@ -12,15 +15,25 @@ class ModbusExporter(Exporter):
         super().__init__(*args, **kwargs)
 
     async def startup_tasks(self, *args, **kwargs):
-        self.client = AsyncModbusSerialClient(
-            method="rtu",
-            port=self.serial_port,
-            baudrate=self.serial_baudrate,
-            timeout=self.serial_timeout,
-            parity=self.serial_parity,
-            bytesize=self.serial_bytesize,
-            stopbits=self.serial_stopbits,
-        )
+        if self.mode == "tcp":
+            self.client = AsyncModbusTcpClient(
+                host=self.transport_config["host"],
+                port=self.transport_config["port"],
+                timeout=self.timeout,
+            )
+
+        elif self.mode == "rtu":
+            self.client = AsyncModbusSerialClient(
+                method="rtu",
+                port=self.transport_config["port"],
+                baudrate=self.transport_config["baudrate"],
+                timeout=self.timeout,
+                parity=self.transport_config["parity"],
+                bytesize=self.transport_config["bytesize"],
+                stopbits=self.transport_config["stopbits"],
+            )
+        else:
+            raise ValueError("Invalid Modbus mode defined, must be 'tcp' or 'rtu'.")
 
     def read_config(self):
         """Ensure modbus config is defined, use that to define endpoints, which will then read the config."""
@@ -28,12 +41,30 @@ class ModbusExporter(Exporter):
         if "modbus" not in self.config:
             raise ValueError("No Modbus config defined.")
 
-        self.serial_port = self.config["modbus"].get("serial_port", "/dev/ttyUSB0")
-        self.serial_baudrate = self.config["modbus"].get("serial_baudrate", 9600)
-        self.serial_timeout = self.config["modbus"].get("serial_timeout", 1)
-        self.serial_parity = self.config["modbus"].get("serial_parity", "N")
-        self.serial_bytesize = self.config["modbus"].get("serial_bytesize", 8)
-        self.serial_stopbits = self.config["modbus"].get("serial_stopbits", 1)
+        if "mode" not in self.config["modbus"]:
+            self.logger.warning("No Modbus mode defined, defaulting to TCP")
+            self.mode = "tcp"
+        else:
+            self.mode = self.config["modbus"]["mode"].lower()
+
+        if self.mode not in ["tcp", "rtu"]:
+            raise ValueError("Invalid Modbus mode defined, must be 'tcp' or 'rtu'.")
+
+        self.transport_config = self.config["modbus"][self.mode]
+        if self.mode == "rtu":
+            self.transport_config["port"] = self.transport_config.get("port", "/dev/ttyUSB0")
+            self.transport_config["baudrate"] = self.transport_config.get("baudrate", 9600)
+            self.transport_config["timeout"] = self.transport_config.get("timeout", 1)
+            self.transport_config["parity"] = self.transport_config.get("parity", "N")
+            self.transport_config["bytesize"] = self.transport_config.get("bytesize", 8)
+            self.transport_config["stopbits"] = self.transport_config.get("stopbits", 1)
+        elif self.mode == "tcp":
+            self.transport_config["host"] = self.transport_config.get("host", "127.0.0.1")
+            self.transport_config["port"] = self.transport_config.get("port", 502)
+
+        self.logger.info(f"[{c_(self.mode.upper(), 'blue')}] Transport config: {pretty_print(self.transport_config)}")
+
+        self.timeout = self.config["modbus"].get("timeout", 1)
         self.modbus_slave = self.config["modbus"].get("slave_address", 1)
         self.modbus_registers = self.config["modbus"].get("registers", {})
 
