@@ -24,7 +24,6 @@ class ModbusExporter(Exporter):
 
         elif self.mode == "rtu":
             self.client = AsyncModbusSerialClient(
-                method="rtu",
                 port=self.transport_config["port"],
                 baudrate=self.transport_config["baudrate"],
                 timeout=self.timeout,
@@ -79,7 +78,7 @@ class ModbusExporter(Exporter):
         for metric_list, metric_info in self.modbus_registers.items():
             for name, address in metric_info.items():
                 try:
-                    value = await self.client.read_holding_registers(address, 1, device_id=self.device_id)
+                    value = await self.client.read_holding_registers(address=address, count=1, device_id=self.device_id)
                 except ConnectionException as e:
                     self.logger.critical("Connection error: %s", e)
                     continue
