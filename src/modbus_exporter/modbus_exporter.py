@@ -113,10 +113,11 @@ class ModbusExporter(Exporter):
                     self.logger.error("Error reading register %s: %s", address, value)
                     continue
 
+                self.logger.debug(f"Read value from address {address}: {value.registers}")
                 pymodbus_data_type = self.client.DATATYPE[data_type.upper()]
                 decoded_value = self.client.convert_from_registers(value.registers, data_type=pymodbus_data_type)
 
-                self.logger.info(f"[{self.device_id}] {name}: {value.registers}")
+                self.logger.info(f"[{self.device_id}] {c_(name, 'blue')}: {c_(decoded_value, 'green')}")
                 metric = Metric(
                     name=metric_list,
                     labels={"device_id": str(self.device_id), "address": str(address), "value_name": name},
