@@ -4,6 +4,18 @@ from zenlib.util import pretty_print
 from pymodbus.client.serial import AsyncModbusSerialClient
 from pymodbus.client.tcp import AsyncModbusTcpClient
 from pymodbus.exceptions import ConnectionException
+from pymodbus.payload import BinaryPayloadDecoder
+
+
+DATA_TYPES = ["int16", "uint16", "int32", "uint32", "float32"]
+
+DECODER_MAP = {
+    "int16": BinaryPayloadDecoder.decode_16bit_int,
+    "uint16": BinaryPayloadDecoder.decode_16bit_uint,
+    "int32": BinaryPayloadDecoder.decode_32bit_int,
+    "uint32": BinaryPayloadDecoder.decode_32bit_uint,
+    "float32": BinaryPayloadDecoder.decode_32bit_float,
+}
 
 
 class ModbusExporter(Exporter):
@@ -67,6 +79,18 @@ class ModbusExporter(Exporter):
         self.device_id = self.config["modbus"].get("device_id", 1)
         self.modbus_registers = self.config["modbus"].get("registers", {})
 
+
+        for register_list in self.modbus_registers.values():
+            for name, address in register_list.items():
+                if ":" in name:
+                    name, data_type = name.split(":")
+                    data_type = data_type.strip().lower()
+                else:
+                    data_type = "int16"
+
+                if data_type not in DATA_TYPES:
+                    raise NotImplementedError(f"Data type {data_type} for register {name} is not implemented, must be one of {', '.join(DATA_TYPES)}.")
+
     async def get_modbus_values(self):
         """ Iterate over all modbus register sections.
         Key name is the help text, value is the register address.
@@ -77,8 +101,19 @@ class ModbusExporter(Exporter):
         metrics = []
         for metric_list, metric_info in self.modbus_registers.items():
             for name, address in metric_info.items():
+                if ":" in name:
+                    name, data_type = name.split(":")
+                    data_type = data_type.strip().lower()
+                else:
+                    data_type = "int16"
+
+                if "16" in data_type:
+                    count = 1
+                elif "32" in data_type:
+                    count = 2
+
                 try:
-                    value = await self.client.read_holding_registers(address=address, count=1, device_id=self.device_id)
+                    value = await self.client.read_holding_registers(address=address, count=count, device_id=self.device_id)
                 except ConnectionException as e:
                     self.logger.critical("Connection error: %s", e)
                     continue
@@ -86,11 +121,14 @@ class ModbusExporter(Exporter):
                 if value.isError():
                     self.logger.error("Error reading register %s: %s", address, value)
                     continue
+
+                decoded_value = DECODER_MAP[data_type](value.registers)
+
                 self.logger.info(f"[{self.device_id}] {name}: {value.registers[0]}")
                 metric = Metric(
                     name=metric_list,
                     labels={"device_id": str(self.device_id), "address": str(address)},
-                    value=value.registers[0],
+                    value=decoded_value,
                     type="gauge",
                     help=name,
                     logger=self.logger,
