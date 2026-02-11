@@ -65,7 +65,7 @@ class ModbusExporter(Exporter):
         self.logger.info(f"[{c_(self.mode.upper(), 'blue')}] Transport config: {pretty_print(self.transport_config)}")
 
         self.timeout = self.config["modbus"].get("timeout", 1)
-        self.modbus_slave = self.config["modbus"].get("slave_address", 1)
+        self.device_id = self.config["modbus"].get("device_id", 1)
         self.modbus_registers = self.config["modbus"].get("registers", {})
 
     async def get_modbus_values(self):
@@ -73,13 +73,13 @@ class ModbusExporter(Exporter):
         Key name is the help text, value is the register address.
         The name of the sectoin is used for the metric name.
 
-        The address and slave address are added as labels.
+        The register address and device ID are added as labels.
         """
         metrics = []
         for metric_list, metric_info in self.modbus_registers.items():
             for name, address in metric_info.items():
                 try:
-                    value = await self.client.read_holding_registers(address, 1, slave=self.modbus_slave)
+                    value = await self.client.read_holding_registers(address, 1, device_id=self.device_id)
                 except ConnectionException as e:
                     self.logger.critical("Connection error: %s", e)
                     continue
@@ -87,10 +87,10 @@ class ModbusExporter(Exporter):
                 if value.isError():
                     self.logger.error("Error reading register %s: %s", address, value)
                     continue
-                self.logger.info(f"[{self.modbus_slave}] {name}: {value.registers[0]}")
+                self.logger.info(f"[{self.device_id}] {name}: {value.registers[0]}")
                 metric = Metric(
                     name=metric_list,
-                    labels={"slave": str(self.modbus_slave), "address": str(address)},
+                    labels={"device_id": str(self.device_id), "address": str(address)},
                     value=value.registers[0],
                     type="gauge",
                     help=name,
