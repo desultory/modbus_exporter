@@ -4,19 +4,9 @@ from zenlib.util import pretty_print
 from pymodbus.client.serial import AsyncModbusSerialClient
 from pymodbus.client.tcp import AsyncModbusTcpClient
 from pymodbus.exceptions import ConnectionException
-from pymodbus.payload import BinaryPayloadDecoder
 
 
 DATA_TYPES = ["int16", "uint16", "int32", "uint32", "float32"]
-
-DECODER_MAP = {
-    "int16": BinaryPayloadDecoder.decode_16bit_int,
-    "uint16": BinaryPayloadDecoder.decode_16bit_uint,
-    "int32": BinaryPayloadDecoder.decode_32bit_int,
-    "uint32": BinaryPayloadDecoder.decode_32bit_uint,
-    "float32": BinaryPayloadDecoder.decode_32bit_float,
-}
-
 
 class ModbusExporter(Exporter):
     """Modbus exporter class for prometheus metrics."""
@@ -82,8 +72,8 @@ class ModbusExporter(Exporter):
 
         for register_list in self.modbus_registers.values():
             for name, address in register_list.items():
-                if ":" in name:
-                    name, data_type = name.split(":")
+                if isinstance(address, str) and ":" in address:
+                    data_type, address= address.split(":")
                     data_type = data_type.strip().lower()
                 else:
                     data_type = "int16"
@@ -101,11 +91,12 @@ class ModbusExporter(Exporter):
         metrics = []
         for metric_list, metric_info in self.modbus_registers.items():
             for name, address in metric_info.items():
-                if ":" in name:
-                    name, data_type = name.split(":")
+                if isinstance(address, str) and ":" in address:
+                    data_type, address = address.split(":")
                     data_type = data_type.strip().lower()
                 else:
                     data_type = "int16"
+                address = int(address)
 
                 if "16" in data_type:
                     count = 1
@@ -122,7 +113,8 @@ class ModbusExporter(Exporter):
                     self.logger.error("Error reading register %s: %s", address, value)
                     continue
 
-                decoded_value = DECODER_MAP[data_type](value.registers)
+                pymodbus_data_type = self.client.DATATYPE[data_type.upper()]
+                decoded_value = self.client.convert_from_registers(value.registers, data_type=pymodbus_data_type)
 
                 self.logger.info(f"[{self.device_id}] {name}: {value.registers[0]}")
                 metric = Metric(
