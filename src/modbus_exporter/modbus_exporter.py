@@ -116,7 +116,7 @@ class ModbusExporter(Exporter):
                 pymodbus_data_type = self.client.DATATYPE[data_type.upper()]
                 decoded_value = self.client.convert_from_registers(value.registers, data_type=pymodbus_data_type)
 
-                self.logger.info(f"[{self.device_id}] {name}: {value.registers[0]}")
+                self.logger.info(f"[{self.device_id}] {name}: {value.registers}")
                 metric = Metric(
                     name=metric_list,
                     labels={"device_id": str(self.device_id), "address": str(address)},
